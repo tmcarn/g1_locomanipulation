@@ -1,0 +1,17 @@
+<mujoco model="scene">
+    <include file="humanoid_2D.xml"/>
+    <include file="box.xml"/>
+
+    <worldbody>
+        <light name="sun" directional="true" dir="-1 -1 -2" castshadow="true"
+            diffuse="1.2 1.2 1.2" specular="0.3 0.3 0.3" ambient="0.3 0.3 0.3"/>
+        <geom name="ground" type="plane" size="5 5 0.5" rgba="0.3 0.3 0.3 1"/>
+    </worldbody>
+
+    <keyframe>
+        <key name="hands_on_box"
+            qpos="-1.82242847 -0.00215955  0.2        -1.18494289 -0.53653159 -1.18494289
+ -0.53653159  0.05093734  0.08726647 -0.60294404  0.56002515  0.0"/>
+    </keyframe>
+
+</mujoco>
