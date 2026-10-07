@@ -7,10 +7,11 @@ import os
 from PIL import Image
 
 from constants import *
-from debug_viz import DebugVisualizer
+from vizualization import DebugVisualizer, VideoRecorder
 
 from kinematic_utils import SceneModel
 from key_frame_generator import Solver
+from whole_body_control import WholeBodyController
 
 
 class Env:
@@ -27,18 +28,16 @@ class Env:
         self.mj_data = mujoco.MjData(self.mj_model)
         self.dt = SIM_DT  # control timestep
 
-        print([a for a in dir(self.mj_model) if 'cam' in a.lower()])
+        # self.nq_robot = 11
 
-        self.nq_robot = 11
-
-        self.key_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_KEY, "hands_on_box")
-        mujoco.mj_resetDataKeyframe(self.mj_model, self.mj_data, self.key_id)
+        # self.key_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_KEY, "hands_on_box")
+        # mujoco.mj_resetDataKeyframe(self.mj_model, self.mj_data, self.key_id)
 
         mujoco.mj_step(self.mj_model, self.mj_data)
     
         self.viewer = mujoco.viewer.launch_passive(self.mj_model, self.mj_data)
         self.renderer = mujoco.Renderer(self.mj_model, height=1080, width=1920)
-        cam_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "poster_view")
+        cam_id = mujoco.mj_name2id(self.mj_model, mujoco.mjtObj.mjOBJ_CAMERA, "side_track")
         self.mj_model.cam_projection[cam_id] = 1
         self.mj_model.cam_fovy[cam_id] = 3.0          # orthographic extent, same meaning as fovy="2"
 
@@ -53,7 +52,7 @@ class Env:
 
 
     def reset(self, q=None):
-        mujoco.mj_resetDataKeyframe(self.mj_model, self.mj_data, self.key_id)
+        # mujoco.mj_resetDataKeyframe(self.mj_model, self.mj_data, self.key_id)
         if q is not None:
             self.mj_data.qpos[:] = q
 
@@ -66,9 +65,11 @@ class Env:
 
         return q, dq
 
-    def step(self, tau):
+    def step(self, tau=None):
         # tau shape (10,) — actuated joints only
-        self.mj_data.ctrl[:] = tau
+        if tau is not None:
+            self.mj_data.ctrl[:] = tau
+
         mujoco.mj_step(self.mj_model, self.mj_data)
         return self.get_joint_state()
 
@@ -76,7 +77,7 @@ class Env:
         '''Sync the viewer to the current sim state.'''
         self.viewer.sync()
 
-    def capture_frame(self, camera="planar_view", save_path="frame.png"):
+    def capture_frame(self, camera="side_track", save_path="frame.png"):
         self.renderer.update_scene(self.mj_data, camera=camera)
         pixels = self.renderer.render()
         Image.fromarray(pixels).save(os.path.join("images", save_path))
@@ -91,8 +92,11 @@ def run(q=None):
     env = Env()
     env.reset(q)
 
-    viz = DebugVisualizer(env.viewer)
+    fps = 30
+    record_every = int(round(1 / (fps * env.dt)))   # e.g. 33 steps at dt = 1 ms
+    rec = VideoRecorder("videos/push.mp4", fps=fps)
 
+    step = 0
     while env.viewer.is_running():
         q, dq = env.get_joint_state()
         tau = np.zeros(8)
@@ -106,7 +110,7 @@ def run(q=None):
         # )
         
         env.render()
-        time.sleep(env.dt*10)
+        time.sleep(env.dt*100)
 
         
 
@@ -114,16 +118,40 @@ def run(q=None):
 
 
 if __name__ == "__main__":
+    F_des = np.array([-10, 0]) # 100N force
     scene = SceneModel()
-    print("mass", scene.robot_mass)
 
     env = Env()
-        
-    solver = Solver(scene)  # pass a SceneModel instance to scale standoff with box size
-    q0 = solver.solve_ik()
-    q = np.zeros(12)
-    q[:-1] = q0
 
-    env.reset(q)
-    env.capture_frame(save_path="planar_view.png")
+    q0 = [np.pi/6, np.pi/3, 0]
+
+    q, dq = env.reset(q0)
+
+    wbc = WholeBodyController(scene)
+
+    fps = 30
+    slowdown = 10
+
+    T_record = 1.0  # 1s of simulation time
+    record_every = int(round(1 / (slowdown * fps * env.dt)))   # e.g. 33 steps at dt = 1 ms
+    rec = VideoRecorder("videos/push.mp4", fps=fps)
+
+    step = 0
+    while env.viewer.is_running():
+        q, dq = env.get_joint_state()
+        tau = wbc.compute_control(q, dq, F_des)
+        env.step(tau)
+        env.render()
+        time.sleep(env.dt*1)
+        if rec is not None:
+            if env.mj_data.time >= T_record:
+                rec.close()
+                rec = None                     # stop recording, keep simulating
+                print("Recording saved")
+            elif step % record_every == 0:
+                rec.add(env.capture_frame())
+        step += 1
+
+    if rec is not None:
+        rec.close()                            # in case the viewer was closed early
     env.close()

@@ -2,10 +2,8 @@
     <compiler angle="degree"/>
     <worldbody>
         <body name="box" pos="0 0 1">
-            <joint name="box_x" type="slide" axis="1 0 0"/>
-            <!-- <joint name="box_z" type="slide" axis="0 0 1"/>
-            <joint name="box_ry" type="hinge" axis="0 1 0"/> -->
-            <geom name="box_geom" type="box" size="1 1 1" mass="27"/>
+            <joint name="box_x" type="slide" axis="1 0 0" damping="5"/>
+            <geom name="box_geom" type="box" size="1 1 1" mass="4"/>
             <camera name="planar_view" pos="0 -5 0" xyaxes="1 0 0 0 0 1"/>
 
         </body>

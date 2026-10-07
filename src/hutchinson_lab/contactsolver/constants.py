@@ -1,7 +1,8 @@
 import os
 
 SCENE_PATH = os.path.join(os.path.dirname(__file__), "xmls/scene.xml")
-ROBOT_PATH = os.path.join(os.path.dirname(__file__), "xmls/humanoid_2D.xml")
+# ROBOT_PATH = os.path.join(os.path.dirname(__file__), "xmls/humanoid_2D.xml")
+ROBOT_PATH = os.path.join(os.path.dirname(__file__), "xmls/two_link_arm.xml")
 BOX_PATH = os.path.join(os.path.dirname(__file__), "xmls/box.xml")
 
 

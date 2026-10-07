@@ -1,0 +1,36 @@
+<mujoco model="simple_arm">
+    <compiler angle="degree"/>
+    <option timestep="0.001"/>
+
+    <visual>
+        <global offwidth="1980" offheight="1080"/>
+    </visual>
+
+    <asset>
+        <texture type="skybox" builtin="flat" rgb1="1 1 1" rgb2="1 1 1" width="32" height="32"/>
+    </asset>
+
+    <worldbody>
+        <camera name="side_track" pos="0 -3 0.6" xyaxes="1 0 0 0 0 1" fovy="45"/>
+
+        <body name="leg" pos="-2.2 0 0">
+            <joint name="ankle" axis="0 1 0"/>
+            <geom name="leg_geom" type="capsule" pos="0 0 0.4" size="0.05 0.4" mass="1" rgba="0.2 0.2 0.8 1"/>
+            <site name="hip_site" pos="0 0 0.8" size="0.01" rgba="0 0.5 0 1"/>
+
+
+            <body name="arm" pos="0 0 0.8">
+                <joint name="hip" axis="0 1 0"/>
+                <geom name="arm_geom" type="capsule" pos="0 0 0.4" size="0.05 0.4" mass="1" rgba="0.8 0.5 0.2 1"/>
+                <site name="hand_site" pos="0 0 0.8" size="0.01" rgba="1 0.5 1 1"/>
+
+            </body>
+        </body> 
+    </worldbody>
+
+    <actuator>
+        <motor joint="ankle" ctrlrange="-200 200"/>
+        <motor joint="hip" ctrlrange="-200 200"/>
+    </actuator>
+    
+</mujoco>

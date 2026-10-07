@@ -32,8 +32,6 @@ def run():
     cdmpc.solve_mpc(q0, dq0, V_cmd)
     com_refs, box_refs, f_refs = cdmpc.get_full_trajectory(cdmpc._prev_sol)
 
-    return
-
     tot_ticks = 0
 
     while env.viewer.is_running() and tot_ticks < total_ticks:

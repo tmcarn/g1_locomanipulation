@@ -1,6 +1,21 @@
 import mujoco
 import numpy as np
 
+import imageio
+import os
+
+class VideoRecorder:
+    def __init__(self, path="videos/out.mp4", fps=30):
+        os.makedirs(os.path.dirname(path), exist_ok=True)
+        self.writer = imageio.get_writer(path, fps=fps, codec="libx264",
+                                         quality=8, macro_block_size=1)
+
+    def add(self, frame):
+        self.writer.append_data(frame)
+
+    def close(self):
+        self.writer.close()
+
 
 class DebugVisualizer:
     """

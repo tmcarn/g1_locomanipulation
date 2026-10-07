@@ -46,6 +46,11 @@ class SceneModel:
 
         self.g = 9.81
 
+        # Friction Coefficients
+        self.mu_ground_box = 1.0
+        self.mu_ground_foot = 0.6
+        self.mu_box_hand = 1.0
+
         self._set_box_config(contact_height_ratio)
 
     def _set_box_config(self, contact_height_ratio):
@@ -86,10 +91,10 @@ class SceneModel:
                                         pin.LOCAL_WORLD_ALIGNED)
         return box_pose.translation[0], box_vel.linear[0]
 
-    def get_contact_position(self, q_robot, name):
+    def get_contact_position(self, q_robot, site_id):
         pin.forwardKinematics(self.robot_model, self.robot_data, q_robot)
         pin.updateFramePlacements(self.robot_model, self.robot_data)
-        pos = self.robot_data.oMf[self.frame_idxs[name]].translation
+        pos = self.robot_data.oMf[site_id].translation
         return np.array([pos[0], pos[2]])  # planar x, z
 
     def get_contact_locations(self, q_robot):

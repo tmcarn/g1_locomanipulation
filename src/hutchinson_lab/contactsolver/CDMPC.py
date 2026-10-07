@@ -23,11 +23,6 @@ class CentroidalSolver:
 
         self.a_max = 1.0
 
-        # Friction Coefficients
-        self.mu_ground_box = 1.0
-        self.mu_ground_foot = 0.6
-        self.mu_box_hand = 1.0
-
         # MPC Parameters 
         self.T = MPC_T # Planning Horizon
         self.dt = MPC_DT
