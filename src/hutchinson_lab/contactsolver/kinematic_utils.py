@@ -13,10 +13,8 @@ class CDRef:
 
 @dataclass
 class FRef:
-    f_rhand: np.ndarray | None = None
-    f_lhand: np.ndarray | None = None
-    f_rfoot: np.ndarray | None = None
-    f_lfoot: np.ndarray | None = None
+    f_hand: np.ndarray | None = None
+    f_foot: np.ndarray | None = None
 
 
 class SceneModel:
@@ -26,14 +24,14 @@ class SceneModel:
     reloads the MJCF nor risks drifting out of sync with the other.
     """
 
-    def __init__(self, nq_robot=11, contact_height_ratio=0.75):
-        self.nq_robot = nq_robot
-
+    def __init__(self, contact_height_ratio=0.75):
         mj_model = mujoco.MjModel.from_xml_path(ROBOT_PATH)
         self.tau_max = mj_model.actuator_forcerange[:, 1]   # now real, since forcerange is set in the XML
 
         self.robot_model = pin.buildModelFromMJCF(ROBOT_PATH)
         self.robot_data = self.robot_model.createData()
+
+        self.nq_robot = self.robot_model.nq
 
         self.box_model = pin.buildModelFromMJCF(BOX_PATH)
         self.box_data = self.box_model.createData()
@@ -47,7 +45,6 @@ class SceneModel:
         self.g = 9.81
 
         # Friction Coefficients
-        self.mu_ground_box = 1.0
         self.mu_ground_foot = 0.6
         self.mu_box_hand = 1.0
 
@@ -60,6 +57,9 @@ class SceneModel:
         mj_model = mujoco.MjModel.from_xml_path(BOX_PATH)
         box_geom_id = mj_model.geom("box_geom").id
         self.box_half_extents = mj_model.geom_size[box_geom_id]
+
+        # viscous box-ground friction, read from the sim so the two can't drift
+        self.box_damping = float(mj_model.dof_damping[mj_model.joint("box_x").dofadr[0]])
 
         self.b_contact_pos = np.array([-self.box_half_extents[0], contact_height_ratio * 2 * self.box_half_extents[2]])
         self.b_grf_pos = np.array([0.0, -self.box_half_extents[2]])
@@ -101,13 +101,10 @@ class SceneModel:
         pin.forwardKinematics(self.robot_model, self.robot_data, q_robot)
         pin.updateFramePlacements(self.robot_model, self.robot_data)
 
-        rhand = self.robot_data.oMf[self.frame_idxs["right_hand"]].translation
-        lhand = self.robot_data.oMf[self.frame_idxs["left_hand"]].translation
-        rfoot = self.robot_data.oMf[self.frame_idxs["right_foot"]].translation
-        lfoot = self.robot_data.oMf[self.frame_idxs["left_foot"]].translation
+        hand = self.robot_data.oMf[self.frame_idxs["right_hand"]].translation
+        foot = self.robot_data.oMf[self.frame_idxs["right_foot"]].translation
 
-        return (np.array(rhand)[[0, 2]], np.array(lhand)[[0, 2]],
-                np.array(rfoot)[[0, 2]], np.array(lfoot)[[0, 2]])
+        return np.array(hand)[[0, 2]], np.array(foot)[[0, 2]]
 
     def get_com_jacobian(self, q_robot):
         J = pin.jacobianCenterOfMass(self.robot_model, self.robot_data, q_robot)

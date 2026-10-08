@@ -1,6 +1,6 @@
 <mujoco model="scene">
-    <!-- <include file="humanoid_2D.xml"/> -->
-    <include file="two_link_arm.xml"/>
+    <include file="humanoid_2D.xml"/>
+    <!-- <include file="two_link_arm.xml"/> -->
 
     <include file="box.xml"/>
 
@@ -10,10 +10,10 @@
         <geom name="ground" type="plane" size="5 5 0.5" rgba="0.3 0.3 0.3 1"/>
     </worldbody>
 
-    <!-- <keyframe>
+    <keyframe>
         <key name="hands_on_box"
-            qpos="-1.82242847 -0.00215955  0.2        -1.18494289 -0.53653159 -1.18494289
- -0.53653159  0.05093734  0.08726647 -0.60294404  0.56002515  0.0"/>
-    </keyframe> -->
+            qpos="-1.77110567  5.0901582   0.2        -0.99235108 -0.65470808 -0.31100365
+  0.08726646  0.          0. "/>
+    </keyframe>
 
 </mujoco>

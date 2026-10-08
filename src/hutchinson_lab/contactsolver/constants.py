@@ -1,12 +1,12 @@
 import os
 
 SCENE_PATH = os.path.join(os.path.dirname(__file__), "xmls/scene.xml")
-# ROBOT_PATH = os.path.join(os.path.dirname(__file__), "xmls/humanoid_2D.xml")
-ROBOT_PATH = os.path.join(os.path.dirname(__file__), "xmls/two_link_arm.xml")
+ROBOT_PATH = os.path.join(os.path.dirname(__file__), "xmls/humanoid_2D.xml")
+# ROBOT_PATH = os.path.join(os.path.dirname(__file__), "xmls/two_link_arm.xml")
 BOX_PATH = os.path.join(os.path.dirname(__file__), "xmls/box.xml")
 
 
-SITE_NAMES = ['right_hand', 'left_hand', 'right_foot', 'left_foot']
+SITE_NAMES = ['right_hand', 'right_foot']
 
 SIM_DT = 0.001 # 1kHz
 MPC_DT = 0.010 # 100Hz 

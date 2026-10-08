@@ -15,8 +15,6 @@ class CentroidalSolver:
     def __init__(self, scene: SceneModel):
         self.scene = scene
 
-        self.nq_robot = 11
-
         self.robot_mass = self.scene.robot_mass
         self.z_nom = 1.2
         self.z_min = 1.0
@@ -30,8 +28,12 @@ class CentroidalSolver:
         self._build_nlp()
         self._prev_sol = None
 
-    def box_dynamics(self, f_rhand_x, f_lhand_x, f_ground_x):
-        f_net_x = -f_rhand_x - f_lhand_x + f_ground_x
+    def friction_force(self, v_box):
+        """Viscous box-ground friction, matching the box_x joint damping in the sim."""
+        return -self.scene.box_damping * v_box
+
+    def box_dynamics(self, f_hand_x, v_box):
+        f_net_x = -f_hand_x + self.friction_force(v_box)
         return f_net_x / self.scene.box_mass
 
     def _build_nlp(self):
@@ -44,8 +46,7 @@ class CentroidalSolver:
         self.p_box_0_param = self.opti.parameter(1)
         self.v_box_0_param = self.opti.parameter(1)
         self.V_target_param = self.opti.parameter(1)
-        self.rfoot_param = self.opti.parameter(2)   # contact locations also vary per solve
-        self.lfoot_param = self.opti.parameter(2)
+        self.foot_param = self.opti.parameter(2)   # contact location also varies per solve
 
         self.p_box_prev_param = [self.opti.parameter(1) for _ in range(self.T)]
         self.p_com_prev_param = [self.opti.parameter(2) for _ in range(self.T)]
@@ -61,12 +62,8 @@ class CentroidalSolver:
         self.v_box = [self.opti.variable(1) for _ in range(self.T+1)]
 
         # Contact Forces (acting on the Robot)
-        self.f_rhand  = [self.opti.variable(2) for _ in range(self.T)]
-        self.f_lhand  = [self.opti.variable(2) for _ in range(self.T)]
-        self.f_rfoot  = [self.opti.variable(2) for _ in range(self.T)]
-        self.f_lfoot  = [self.opti.variable(2) for _ in range(self.T)]
-
-        self.f_ground_x = [self.opti.variable(1) for _ in range(self.T)]
+        self.f_hand = [self.opti.variable(2) for _ in range(self.T)]
+        self.f_foot = [self.opti.variable(2) for _ in range(self.T)]
 
         '''Constraints'''
         # x[0] = x0
@@ -86,30 +83,26 @@ class CentroidalSolver:
 
             # Linear Momentum 
             gravity_force = ca.vertcat(0, -self.robot_mass * self.scene.g)
-            f_tot_t = self.f_rhand[t] + self.f_lhand[t] + self.f_rfoot[t] + self.f_lfoot[t] # Hand Forces Negated
+            f_tot_t = self.f_hand[t] + self.f_foot[t] # Hand Forces Negated
             self.opti.subject_to(self.l[t+1] == self.l[t] + self.dt * (gravity_force + f_tot_t))
 
             # Angular Momentum
             p_hand_t = ca.vertcat(self.p_box_prev_param[t] + self.scene.b_contact_pos[0],
                        self.scene.w_box_pos[1] + self.scene.b_contact_pos[1])
-            arm_rhand = p_hand_t - self.p_com_prev_param[t]
-            arm_lhand = p_hand_t - self.p_com_prev_param[t]
-            arm_rfoot = self.rfoot_param - self.p_com[t]
-            arm_lfoot = self.lfoot_param - self.p_com[t]
+            arm_hand = p_hand_t - self.p_com_prev_param[t]
+            arm_foot = self.foot_param - self.p_com[t]
 
-            torque_tot_t = (cross2d(arm_rhand, self.f_rhand[t])
-                        + cross2d(arm_lhand, self.f_lhand[t])
-                        + cross2d(arm_rfoot, self.f_rfoot[t])
-                        + cross2d(arm_lfoot, self.f_lfoot[t]))
+            torque_tot_t = (cross2d(arm_hand, self.f_hand[t])
+                        + cross2d(arm_foot, self.f_foot[t]))
 
             self.opti.subject_to(self.k[t+1] == self.k[t] + self.dt * torque_tot_t)
 
             ''' Box Dynamics '''
-            f_ground_z_t = self.scene.box_mass * self.scene.g + self.f_rhand[t][1] + self.f_lhand[t][1]
-            f_net_x_t = -self.f_rhand[t][0] - self.f_lhand[t][0] + self.f_ground_x[t]
+            f_ground_z_t = self.scene.box_mass * self.scene.g + self.f_hand[t][1]
+            f_net_x_t = -self.f_hand[t][0] + self.friction_force(self.v_box[t])
 
             # Position
-            self.opti.subject_to(self.p_box[t+1] == self.p_box[t] + self.dt * self.v_box[t]) 
+            self.opti.subject_to(self.p_box[t+1] == self.p_box[t] + self.dt * self.v_box[t])
 
             # Velocity
             self.opti.subject_to(self.v_box[t+1] == self.v_box[t] + self.dt * (f_net_x_t / self.scene.box_mass))
@@ -118,25 +111,20 @@ class CentroidalSolver:
             self.opti.subject_to(f_net_x_t <=  self.scene.box_mass * self.a_max)
             self.opti.subject_to(f_net_x_t >= -self.scene.box_mass * self.a_max)
 
-            # Box Friction Cone
-            self.opti.subject_to(self.f_ground_x[t] <=  self.mu_ground_box * f_ground_z_t)
-            self.opti.subject_to(self.f_ground_x[t] >= -self.mu_ground_box * f_ground_z_t)
+            # Box stays on the ground (hand must not lift it)
             self.opti.subject_to(f_ground_z_t >= 0)
 
-            # Dissapation Constraint
-            self.opti.subject_to(self.f_ground_x[t] <= 0) 
+            # Hand Friction Cone
+            f_h = self.f_hand[t]
+            self.opti.subject_to(f_h[1] <=  self.scene.mu_box_hand * (-f_h[0]))
+            self.opti.subject_to(f_h[1] >= -self.scene.mu_box_hand * (-f_h[0]))
+            self.opti.subject_to(f_h[0] <= 0)
 
-            # Hand Friction Cones
-            for f in [self.f_rhand[t], self.f_lhand[t]]:
-                self.opti.subject_to(f[1] <=  self.mu_box_hand * (-f[0]))
-                self.opti.subject_to(f[1] >= -self.mu_box_hand * (-f[0]))
-                self.opti.subject_to(f[0] <= 0)
-
-            # Foot Friction Cones
-            for f in [self.f_rfoot[t], self.f_lfoot[t]]:
-                self.opti.subject_to(f[0] <=  self.mu_ground_foot * f[1])
-                self.opti.subject_to(f[0] >= -self.mu_ground_foot * f[1])
-                self.opti.subject_to(f[1] >= 0)
+            # Foot Friction Cone
+            f_f = self.f_foot[t]
+            self.opti.subject_to(f_f[0] <=  self.scene.mu_ground_foot * f_f[1])
+            self.opti.subject_to(f_f[0] >= -self.scene.mu_ground_foot * f_f[1])
+            self.opti.subject_to(f_f[1] >= 0)
 
         cost = ca.sumsqr(self.v_box[self.T] - self.V_target_param)
         for t in range(self.T):
@@ -147,8 +135,7 @@ class CentroidalSolver:
             # Angular Momentum Normalization
             cost += ca.sumsqr(self.k[t])
             # Force Normalization
-            cost += 1e-5 * (ca.sumsqr(self.f_rhand[t]) + ca.sumsqr(self.f_lhand[t])
-                        + ca.sumsqr(self.f_rfoot[t]) + ca.sumsqr(self.f_lfoot[t]))
+            cost += 1e-5 * (ca.sumsqr(self.f_hand[t]) + ca.sumsqr(self.f_foot[t]))
 
 
         self.opti.minimize(cost)
@@ -161,7 +148,8 @@ class CentroidalSolver:
     def solve_mpc(self, q0, dq0, V_target):
         q_robot_0, dq_robot_0, q_box_0, dq_box_0 = self.scene.get_joint_states(q0, dq0)
 
-        rhand_pos, lhand_pos, rfoot_pos, lfoot_pos = self.scene.get_contact_locations(q_robot_0)
+        # hand contact point is driven by the box, not by current FK
+        _, foot_pos = self.scene.get_contact_locations(q_robot_0)
 
         p_com_0, l_0, k_0 = self.scene.get_centroidal_state(q_robot_0, dq_robot_0)
         p_box_0, v_box_0 = self.scene.get_box_state(q_box_0, dq_box_0)
@@ -172,8 +160,7 @@ class CentroidalSolver:
         self.opti.set_value(self.p_box_0_param, p_box_0)
         self.opti.set_value(self.v_box_0_param, v_box_0)
         self.opti.set_value(self.V_target_param, V_target)
-        self.opti.set_value(self.rfoot_param, rfoot_pos)
-        self.opti.set_value(self.lfoot_param, lfoot_pos)
+        self.opti.set_value(self.foot_param, foot_pos)
 
         if self._prev_sol is not None:
             for t in range(self.T):
@@ -191,7 +178,7 @@ class CentroidalSolver:
 
             # forces (length T): same shift, but the last valid index is T-1, not T —
             # hold prev's final force since there's no T-th one to shift in
-            for var in [self.f_rhand, self.f_lhand, self.f_rfoot, self.f_lfoot, self.f_ground_x]:
+            for var in [self.f_hand, self.f_foot]:
                 for t in range(self.T - 1):
                     self.opti.set_initial(var[t], self._prev_sol.value(var[t+1]))
                 self.opti.set_initial(var[self.T - 1], self._prev_sol.value(var[self.T - 1]))
@@ -205,7 +192,7 @@ class CentroidalSolver:
         sol = self.opti.solve()
         self._prev_sol = sol
 
-        self.plot_solution(sol, self.p_box, self.v_box, self.f_rhand, self.f_lhand, self.f_rfoot, self.f_lfoot, self.f_ground_x, self.p_com, V_target)
+        self.plot_solution(sol, self.p_box, self.v_box, self.f_hand, self.f_foot, self.p_com, V_target)
 
 
         return self.get_full_trajectory(sol)
@@ -254,13 +241,11 @@ class CentroidalSolver:
         gravity_force = np.array([0, -self.robot_mass * self.scene.g])
 
         for t in range(self.T):
-            f_rhand_t = sol.value(self.f_rhand[t])
-            f_lhand_t = sol.value(self.f_lhand[t])
-            f_rfoot_t = sol.value(self.f_rfoot[t])
-            f_lfoot_t = sol.value(self.f_lfoot[t])
-            f_ground_x_t = sol.value(self.f_ground_x[t])
+            f_hand_t = sol.value(self.f_hand[t])
+            f_foot_t = sol.value(self.f_foot[t])
+            v_box_t = sol.value(self.v_box[t])
 
-            f_tot_t = f_rhand_t + f_lhand_t + f_rfoot_t + f_lfoot_t
+            f_tot_t = f_hand_t + f_foot_t
             com_xdd_t = (gravity_force + f_tot_t) / self.robot_mass
 
             com_refs.append(CDRef(
@@ -271,15 +256,13 @@ class CentroidalSolver:
 
             box_refs.append(CDRef(
                 x_ref=sol.value(self.p_box[t]),
-                xd_ref=sol.value(self.v_box[t]),
-                xdd_ref=self.box_dynamics(f_rhand_t[0], f_lhand_t[0], f_ground_x_t),
+                xd_ref=v_box_t,
+                xdd_ref=self.box_dynamics(f_hand_t[0], v_box_t),
             ))
 
             f_refs.append(FRef(
-                f_rhand=f_rhand_t,
-                f_lhand=f_lhand_t,
-                f_rfoot=f_rfoot_t,
-                f_lfoot=f_lfoot_t,
+                f_hand=f_hand_t,
+                f_foot=f_foot_t,
             ))
 
         # append the terminal node (T) for com_refs/box_refs so interpolation has
@@ -299,7 +282,7 @@ class CentroidalSolver:
 
         return com_refs, box_refs, f_refs
 
-    def plot_solution(self, sol, p_box, v_box, f_rhand, f_lhand, f_rfoot, f_lfoot, f_ground_x, r_com, V_target):
+    def plot_solution(self, sol, p_box, v_box, f_hand, f_foot, r_com, V_target):
         t_axis = np.arange(self.T+1) * self.dt
         t_axis_f = np.arange(self.T) * self.dt  # forces are per-interval, one shorter
 
@@ -308,12 +291,10 @@ class CentroidalSolver:
         com_x  = [float(sol.value(r_com[t])[0]) for t in range(self.T+1)]
         com_z  = [float(sol.value(r_com[t])[1]) for t in range(self.T+1)]
 
-        frh = np.array([sol.value(f_rhand[t]) for t in range(self.T)])
-        flh = np.array([sol.value(f_lhand[t]) for t in range(self.T)])
-        frf = np.array([sol.value(f_rfoot[t]) for t in range(self.T)])
-        flf = np.array([sol.value(f_lfoot[t]) for t in range(self.T)])
-        fgx = [float(sol.value(f_ground_x[t])) for t in range(self.T)]
-        fgz = [self.scene.box_mass * self.scene.g - frh[t, 1] - flh[t, 1] for t in range(self.T)]
+        fh = np.array([sol.value(f_hand[t]) for t in range(self.T)])
+        ff = np.array([sol.value(f_foot[t]) for t in range(self.T)])
+        fgx = [float(self.friction_force(box_vx[t])) for t in range(self.T)]
+        fgz = [self.scene.box_mass * self.scene.g + fh[t, 1] for t in range(self.T)]
 
         fig, axes = plt.subplots(3, 2, figsize=(11, 9))
 
@@ -336,18 +317,14 @@ class CentroidalSolver:
         axes[1,1].set_title("Ground normal force (Fnx, Fnz)")
         axes[1,1].legend()
 
-        axes[2,0].plot(t_axis_f, frh[:,0], label="rhand fx")
-        axes[2,0].plot(t_axis_f, flh[:,0], label="lhand fx")
-        axes[2,0].plot(t_axis_f, frh[:,1], label="rhand fz")
-        axes[2,0].plot(t_axis_f, flh[:,1], label="lhand fz")
-        axes[2,0].set_title("Hand forces (fx + fz)")
+        axes[2,0].plot(t_axis_f, fh[:,0], label="hand fx")
+        axes[2,0].plot(t_axis_f, fh[:,1], label="hand fz")
+        axes[2,0].set_title("Hand force (fx + fz)")
         axes[2,0].legend()
 
-        axes[2,1].plot(t_axis_f, frf[:,0], label="rfoot fx")
-        axes[2,1].plot(t_axis_f, flf[:,0], label="lfoot fx")
-        axes[2,1].plot(t_axis_f, frf[:,1], label="rfoot fz")
-        axes[2,1].plot(t_axis_f, flf[:,1], label="lfoot fz")
-        axes[2,1].set_title("Foot forces (fx + fz)")
+        axes[2,1].plot(t_axis_f, ff[:,0], label="foot fx")
+        axes[2,1].plot(t_axis_f, ff[:,1], label="foot fz")
+        axes[2,1].set_title("Foot force (fx + fz)")
         axes[2,1].legend()
 
         for ax in axes.flat:

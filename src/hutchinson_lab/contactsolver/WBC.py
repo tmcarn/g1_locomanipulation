@@ -6,9 +6,9 @@ import numpy as np
 
 
 class WBC:
-    ACTIVE_CONTACTS = ['right_hand', 'left_hand', 'right_foot', 'left_foot']
-    STATIC_CONTACTS = ['right_foot', 'left_foot'] # Stay planted on the floor
-    DYNAMIC_CONTACTS = ['right_hand', 'left_hand'] # Move with the Box
+    ACTIVE_CONTACTS = ['right_hand', 'right_foot']
+    STATIC_CONTACTS = ['right_foot'] # Stay planted on the floor
+    DYNAMIC_CONTACTS = ['right_hand'] # Move with the Box
 
     def __init__(self, scene: SceneModel):
         self.scene = scene
@@ -87,12 +87,12 @@ class WBC:
 
         # --- friction cones ---
         mu = 1.0
-        for name in ['right_hand', 'left_hand']:
+        for name in self.DYNAMIC_CONTACTS:
             self.opti.subject_to(self.fc[name][1] <=  mu * (-self.fc[name][0]))
             self.opti.subject_to(self.fc[name][1] >= -mu * (-self.fc[name][0]))
             self.opti.subject_to(self.fc[name][0] <= 0)
 
-        for name in ['right_foot', 'left_foot']:
+        for name in self.STATIC_CONTACTS:
             self.opti.subject_to(self.fc[name][0] <=  mu * self.fc[name][1])
             self.opti.subject_to(self.fc[name][0] >= -mu * self.fc[name][1])
             self.opti.subject_to(self.fc[name][1] >= 0)
@@ -120,7 +120,7 @@ class WBC:
 
     def solve(self, q, dq, p_com_ref:CDRef, box_ref:CDRef, f_ref: FRef, logger: WBCLogger=None, tick: int=None):
 
-        print("Force Ref:", f_ref.f_rhand, f_ref.f_lhand, f_ref.f_rfoot, f_ref.f_lfoot)
+        print("Force Ref:", f_ref.f_hand, f_ref.f_foot)
         p_com_meas, p_box_meas = self.get_meas(q, dq)
         q_rob, dq_rob, q_box, dq_box = self.scene.get_joint_states(q, dq)
 
@@ -158,8 +158,7 @@ class WBC:
             pdd_hand_target[name] = (np.array([box_ref.xdd_ref, 0.0])
                                     + Kp_gap * gap_pos_err + Kd_gap * gap_vel_err)
 
-            f_des = {'right_hand': f_ref.f_rhand, 'left_hand': f_ref.f_lhand,
-                    'right_foot': f_ref.f_rfoot, 'left_foot': f_ref.f_lfoot}
+            f_des = {'right_hand': f_ref.f_hand, 'right_foot': f_ref.f_foot}
 
             hand_pos = self.scene.get_contact_position(q_rob, name) # (x, z) via FK — need this method if not present
             hand_vel = J_c[name] @ dq_rob  # (2,) — both x and z rows of the Jacobian

@@ -14,7 +14,7 @@ class WBCLogger:
         if logger.full():
             logger.plot()
     """
-    CONTACTS = ['right_hand', 'left_hand', 'right_foot', 'left_foot']
+    CONTACTS = ['right_hand', 'right_foot']
 
     def __init__(self, n_ticks=20):
         self.n_ticks = n_ticks
@@ -51,7 +51,7 @@ class WBCLogger:
 
         # --- hand forces: ref vs actual, x and z ---
         ax = axes[0, 0]
-        for name, style in [('right_hand', '-'), ('left_hand', '--')]:
+        for name, style in [('right_hand', '-')]:
             ref = np.array(self.f_ref[name])
             act = np.array(self.f_actual[name])
             ax.plot(t, ref[:, 0], style, color='tab:blue', label=f"{name} fx ref")
@@ -60,7 +60,7 @@ class WBCLogger:
         ax.legend(fontsize=7)
 
         ax = axes[0, 1]
-        for name, style in [('right_hand', '-'), ('left_hand', '--')]:
+        for name, style in [('right_hand', '-')]:
             ref = np.array(self.f_ref[name])
             act = np.array(self.f_actual[name])
             ax.plot(t, ref[:, 1], style, color='tab:blue', label=f"{name} fz ref")
@@ -70,7 +70,7 @@ class WBCLogger:
 
         # --- foot forces: ref vs actual, x and z ---
         ax = axes[1, 0]
-        for name, style in [('right_foot', '-'), ('left_foot', '--')]:
+        for name, style in [('right_foot', '-')]:
             ref = np.array(self.f_ref[name])
             act = np.array(self.f_actual[name])
             ax.plot(t, ref[:, 0], style, color='tab:blue', label=f"{name} fx ref")
@@ -79,7 +79,7 @@ class WBCLogger:
         ax.legend(fontsize=7)
 
         ax = axes[1, 1]
-        for name, style in [('right_foot', '-'), ('left_foot', '--')]:
+        for name, style in [('right_foot', '-')]:
             ref = np.array(self.f_ref[name])
             act = np.array(self.f_actual[name])
             ax.plot(t, ref[:, 1], style, color='tab:blue', label=f"{name} fz ref")

@@ -97,7 +97,6 @@ class WholeBodyController:
         A_eq[2, ixb] = self.scene.box_mass
         A_eq[2, ilam] = np.array([1, 0]) # only the horizontal force is effecting box motion
 
-
         # Hand Tracking
         A_eq[3:, iq] = Jc
         A_eq[3:, ixb] = np.array([-1, 0])
